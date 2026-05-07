@@ -1,0 +1,79 @@
+# Hardware Specifications for Dataflow AI Accelerators
+# All bandwidth values in GB/s, memory in GB, FLOPS in TFLOPS
+
+cerebras_wse2:
+  name: "Cerebras WSE-2"
+  execution_model: "wafer_scale"          # wafer_scale | dataflow | bsp
+  peak_flops_fp16: 120.0                  # TFLOPS
+  peak_flops_bf16: 120.0
+  peak_flops_fp32: 60.0
+  # Memory hierarchy
+  onchip_sram_per_tile_kb: 48            # KB per tile
+  num_tiles: 850000
+  total_onchip_sram_gb: 40.0             # ~850k * 48KB
+  onchip_bandwidth_pbps: 20.0            # Petabytes/sec = 20,000,000 GB/s
+  offchip_memory_gb: 0                   # No DRAM for compute — weight streaming via MemoryX
+  memoryx_bandwidth_gbps: 1200.0         # MemoryX off-chip streaming bandwidth
+  # Interconnect
+  inter_chip_bandwidth_gbps: 0           # Single chip — no inter-chip for standard training
+  inter_chip_latency_us: 0
+  # Execution characteristics
+  pipeline_depth: 1                      # Data parallel, not pipelined between layers
+  tile_simd_width: 1                     # Each tile is a scalar processor
+  supports_weight_streaming: true
+  # Derived
+  ridge_point_flops_per_byte: 6.0        # peak_flops / onchip_bw (approx)
+
+sambanova_sn30:
+  name: "SambaNova SN30 RDU"
+  execution_model: "dataflow"
+  peak_flops_fp16: 300.0                 # TFLOPS (per RDU)
+  peak_flops_bf16: 300.0
+  peak_flops_fp32: 150.0
+  # Memory hierarchy — 3-tier
+  onchip_sram_gb: 0.520                  # 520 MB on-chip SRAM (640 PMUs * 512KB + PCUs)
+  onchip_bandwidth_gbps: 20000.0         # On-chip fabric bandwidth
+  hbm_gb: 64.0                           # HBM tier
+  hbm_bandwidth_gbps: 2000.0
+  ddr_gb: 1500.0                         # DDR tier (1.5 TB)
+  ddr_bandwidth_gbps: 225.0
+  offchip_memory_gb: 1564.0              # Total off-chip = HBM + DDR
+  # Architecture
+  num_pcus: 640
+  num_pmus: 640
+  pcu_simd_stages: 6
+  pcu_simd_lanes: 16
+  functional_units_per_pcu: 96
+  pmu_size_kb: 512
+  # Interconnect
+  inter_chip_bandwidth_gbps: 200.0       # InfiniBand between RDUs
+  inter_chip_latency_us: 2.0
+  # Execution
+  pipeline_depth: 100                    # Deep streaming pipeline (hundreds of fused ops)
+  supports_operator_fusion: true
+  ridge_point_flops_per_byte: 150.0      # peak_flops_fp16 (GB equiv) / onchip_bw
+
+graphcore_bow_ipu:
+  name: "Graphcore Bow-IPU (GC200)"
+  execution_model: "bsp"                 # Bulk Synchronous Parallel
+  peak_flops_fp16: 350.0                 # TFLOPS
+  peak_flops_bf16: 350.0
+  peak_flops_fp32: 17.0
+  # Memory hierarchy
+  onchip_sram_per_tile_kb: 624           # KB per tile (local scratchpad)
+  num_tiles: 1472
+  total_onchip_sram_gb: 0.900            # ~900 MB
+  onchip_bandwidth_tbps: 47.5            # TB/s = 47,500 GB/s
+  offchip_ddr_gb: 256.0                  # Streaming DDR
+  offchip_bandwidth_gbps: 51.2
+  # BSP execution
+  bsp_compute_phase: true
+  bsp_exchange_phase: true
+  exchange_fabric_bandwidth_gbps: 192.0  # IPU-Link within pod
+  # Interconnect (multi-IPU)
+  inter_chip_bandwidth_gbps: 192.0       # IPU-Link
+  inter_chip_latency_us: 1.0
+  # Execution
+  pipeline_depth: 6                      # Per BSP superstep
+  threads_per_tile: 6                    # MIMD: 6 threads per tile
+  ridge_point_flops_per_byte: 7.5        # peak_flops / onchip_bw

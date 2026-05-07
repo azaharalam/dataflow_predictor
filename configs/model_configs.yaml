@@ -1,0 +1,59 @@
+# Model Configurations
+# These describe the operator-level characteristics of each model
+# Used when no PyTorch model is provided directly
+
+resnet50:
+  name: "ResNet-50 v1.5"
+  type: "cnn"
+  num_layers: 50
+  input_shape: [3, 224, 224]
+  num_classes: 1000
+  total_params_M: 25.6
+
+bert_large:
+  name: "BERT-Large"
+  type: "transformer"
+  num_layers: 24
+  hidden_dim: 1024
+  num_heads: 16
+  seq_len: 512
+  ffn_multiplier: 4
+  vocab_size: 30522
+  total_params_M: 340.0
+
+gpt2_1_5b:
+  name: "GPT-2 1.5B"
+  type: "transformer"
+  num_layers: 48
+  hidden_dim: 1600
+  num_heads: 25
+  seq_len: 1024
+  ffn_multiplier: 4
+  vocab_size: 50257
+  total_params_M: 1542.0
+
+unet:
+  name: "U-Net"
+  type: "cnn"
+  num_layers: 23
+  input_shape: [1, 256, 256]
+  encoder_channels: [64, 128, 256, 512]
+  decoder_channels: [256, 128, 64]
+  total_params_M: 31.0
+
+candle_uno:
+  name: "CANDLE UNO"
+  type: "mlp"
+  num_layers: 7
+  hidden_dims: [1000, 1000, 1000, 500, 250, 125]
+  input_dim: 942
+  output_dim: 1
+  total_params_M: 4.2
+
+braggnn:
+  name: "BraggNN"
+  type: "cnn"
+  num_layers: 8
+  input_shape: [1, 11, 11]
+  channels: [64, 64, 32, 16]
+  total_params_M: 0.09
