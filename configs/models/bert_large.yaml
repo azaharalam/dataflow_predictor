@@ -1,0 +1,48 @@
+# ============================================================
+# Model Definition: BERT-Large
+# ============================================================
+
+name: "BERT-Large"
+model_id: "bert_large"
+model_type: "transformer"
+description: "BERT-Large pre-training on Wikipedia + BooksCorpus"
+
+training:
+  batch_size: 32
+  seq_len: 512
+  dtype: "fp16"
+  optimizer: "adam"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "Wikipedia+BooksCorpus"
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_encoder"
+
+  embedding:
+    vocab_size: 30522
+    hidden_dim: 1024
+    max_seq_len: 512
+    type_vocab_size: 2
+
+  encoder:
+    num_layers: 24
+    hidden_dim: 1024
+    num_heads: 16
+    head_dim: 64                      # hidden_dim / num_heads
+    ffn_dim: 4096                     # 4 × hidden_dim
+    ffn_activation: "gelu"
+    dropout: 0.1
+    layer_norm: "post"
+
+  pooler:
+    in_features: 1024
+    out_features: 1024
+
+stats:
+  total_params_M: 340.0
+  total_flops_forward_G: 170.0        # GFLOPs for batch=1, seq=512
+  model_size_fp16_gb: 0.648

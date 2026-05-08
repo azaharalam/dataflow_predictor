@@ -1,0 +1,74 @@
+# ============================================================
+# Hardware Specification: Graphcore Bow-2000 (Bow IPU / GC200 Bow)
+# ============================================================
+# Sources:
+#   - Graphcore official "Bow Processors" page
+#   - Graphcore IPU Programmer's Guide (docs.graphcore.ai)
+#   - Graphcore Bow-2000 Datasheet (docs.graphcore.ai)
+#   - HPCwire Bow IPU launch coverage (March 2022)
+#   - arxiv:2311.04417 (IPU/RDU/GPU evaluation)
+#   - eenewseurope Bow power analysis
+#   - Graphcore "The WoW Factor" blog post
+# ============================================================
+
+name: "Graphcore Bow-2000 (Bow IPU / GC200 Bow)"
+hardware_id: "graphcore_bow_ipu"
+execution_model: "bsp"
+
+# ── Compute ───────────────────────────────────────────────────
+# "350 teraFLOPS of AI compute" confirmed from official Graphcore page
+# GC200 Mk2 was 250 TFLOPS FP16. Bow = 250 x 1.4 = 350 TFLOPS.
+peak_flops_fp16: 350.0
+peak_flops_bf16: 350.0
+peak_flops_fp32: 87.5
+
+# ── Architecture ──────────────────────────────────────────────
+# Confirmed from Graphcore IPU Programmer's Guide
+num_tiles: 1472
+threads_per_tile: 6
+
+# ── On-Chip Memory ────────────────────────────────────────────
+# "each tile has 624 kilobytes of SRAM" confirmed
+# "1,472 tiles has just under 900 MB" confirmed
+onchip_sram_per_tile_kb: 624
+total_onchip_sram_gb: 0.900
+onchip_bandwidth_gbps: 47500.0
+
+# ── Off-Chip Memory ───────────────────────────────────────────
+# Bow-2000: 256 GB streaming memory per unit (4 chips)
+# Per chip: 256 / 4 = 64 GB
+offchip_memory_gb: 64.0
+offchip_bandwidth_gbps: 5.0
+
+# ── BSP Execution Model ───────────────────────────────────────
+bsp_compute_phase: true
+bsp_exchange_phase: true
+
+# "supports up to 320 GB/s chip-to-chip bandwidth"
+# confirmed arxiv:2311.04417
+exchange_fabric_bandwidth_gbps: 320.0
+
+# "four GC200 IPU chips connected through IPU-Link
+#  with a bandwidth of 192 GB/s" confirmed arxiv:2311.04417
+ipu_link_bandwidth_gbps: 192.0
+
+# ── Multi-Chip Interconnect ───────────────────────────────────
+inter_chip_bandwidth_gbps: 320.0
+inter_chip_latency_us: 1.0
+
+# ── System Configuration ──────────────────────────────────────
+chips_per_unit: 4
+units_per_pod16: 4
+
+# ── Execution Model ───────────────────────────────────────────
+pipeline_depth: 6
+
+# ── Physical Characteristics ──────────────────────────────────
+process_node: "7nm TSMC WoW"
+transistors_billion: 59.4
+tdp_watts: 350
+
+# ── Derived Performance Parameters ───────────────────────────
+# On-chip ridge point = 350e12 / 47.5e15 = 0.0074 FLOP/byte
+
+ridge_point_flops_per_byte: 7.37

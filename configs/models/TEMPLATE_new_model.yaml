@@ -1,0 +1,143 @@
+# ============================================================
+# NEW MODEL TEMPLATE
+# ============================================================
+# HOW TO ADD YOUR OWN MODEL — NO PYTHON REQUIRED
+#
+# 1. Copy this file
+# 2. Rename it to your_model_name.yaml
+# 3. Fill in all sections below
+# 4. Place it in configs/models/
+# 5. Run immediately:
+#      python -m dataflow_predictor.main --model your_model_name
+#
+# The model_id field must match the filename (without .yaml)
+# ============================================================
+
+# ── Identity ─────────────────────────────────────────────────
+name: "My Custom Model"             # Human-readable display name
+model_id: "my_custom_model"         # Must match filename without .yaml
+                                    # Used as --model argument on CLI
+model_type: "transformer"           # cnn | transformer | mlp | custom
+description: "Brief description of what this model does"
+
+# ── Training Configuration ────────────────────────────────────
+# All parameters that affect memory and compute during training
+training:
+  batch_size: 16                    # Training batch size
+  seq_len: 512                      # Sequence length (transformers only, ignored for CNN/MLP)
+  dtype: "fp16"                     # fp16 | bf16 | fp32
+  optimizer: "adam"                 # adam | adamw | sgd | adagrad
+  optimizer_memory_multiplier: 2.0  # adam/adamw=2.0, sgd+momentum=1.0, sgd=0.0
+  gradient_dtype: "fp32"            # fp32 recommended for stability; fp16 reduces memory
+  mixed_precision: true             # true = fp16 compute + fp32 master weights
+  activation_checkpointing: false   # true = trade compute for memory (recompute activations)
+  checkpointing_memory_factor: 0.3  # Only used when activation_checkpointing=true
+  dataset: "YourDataset"
+  backward_ratio: 2.0               # T_backward / T_forward ratio (2.0 is standard)
+
+# ── Architecture: CHOOSE ONE OF THE TEMPLATES BELOW ──────────
+
+# ─── OPTION A: Transformer (encoder or decoder) ───────────────
+# Use this for BERT, GPT, T5, ViT, etc.
+architecture:
+  type: "transformer_encoder"       # transformer_encoder | transformer_decoder
+
+  embedding:
+    vocab_size: 30000               # Vocabulary size
+    hidden_dim: 768                 # Model hidden dimension
+    max_seq_len: 512                # Maximum sequence length
+
+  encoder:                          # Replace with 'decoder:' for GPT-style
+    num_layers: 12                  # Number of transformer layers
+    hidden_dim: 768
+    num_heads: 12                   # Must divide hidden_dim evenly
+    head_dim: 64                    # hidden_dim / num_heads
+    ffn_dim: 3072                   # Typically 4 × hidden_dim
+    ffn_activation: "gelu"          # gelu | relu | swiglu
+    dropout: 0.1
+    layer_norm: "pre"               # pre | post
+
+# ─── OPTION B: CNN ────────────────────────────────────────────
+# Use this for ResNet, VGG, EfficientNet, U-Net, etc.
+# Uncomment and replace architecture section above with:
+#
+# architecture:
+#   type: "resnet"                  # resnet | vgg | unet | custom_cnn
+#
+#   stem:
+#     type: conv_bn_relu
+#     in_channels: 3
+#     out_channels: 64
+#     kernel: 7
+#     stride: 2
+#     padding: 3
+#     input_h: 224
+#     input_w: 224
+#
+#   stages:
+#     - {num_blocks: 2, mid_channels: 64, out_channels: 256, height: 56, width: 56}
+#     - {num_blocks: 2, mid_channels: 128, out_channels: 512, height: 28, width: 28}
+#
+#   head:
+#     type: linear
+#     in_features: 512
+#     out_features: 1000
+
+# ─── OPTION C: MLP / Fully-Connected ──────────────────────────
+# Use this for CANDLE, DLRM dense layers, simple classifiers etc.
+# Uncomment and replace architecture section above with:
+#
+# architecture:
+#   type: "mlp"
+#
+#   input_dim: 512                  # Input feature dimension
+#   hidden_dims: [1024, 512, 256]   # List of hidden layer sizes
+#   output_dim: 10                  # Output dimension
+#   activation: "relu"              # relu | gelu | tanh | sigmoid
+#   dropout: 0.1
+#   batch_norm: false
+
+# ─── OPTION D: Custom Operator List ───────────────────────────
+# Use this for models that don't fit standard templates.
+# Specify operators explicitly. The most flexible option.
+# Uncomment and replace architecture section above with:
+#
+# architecture:
+#   type: "custom"
+#
+#   operators:
+#     - id: "op_0"
+#       type: "embedding"           # See OperatorType enum for all types
+#       params:
+#         vocab_size: 50000
+#         hidden_dim: 512
+#
+#     - id: "op_1"
+#       type: "linear"
+#       params:
+#         batch_size: 16            # Will be set from training.batch_size
+#         seq_len: 128
+#         in_features: 512
+#         out_features: 1024
+#
+#     - id: "op_2"
+#       type: "relu"
+#       params:
+#         batch_size: 16
+#         seq_len: 128
+#         hidden_dim: 1024
+#
+#     - id: "op_3"
+#       type: "gemm"
+#       params:
+#         batch_size: 16
+#         M: 128
+#         K: 1024
+#         N: 10
+
+# ── Model Statistics (optional but recommended) ───────────────
+# Fill these in if known — used for sanity checking the graph
+stats:
+  total_params_M: 85.0              # Total parameters in millions
+  total_flops_forward_G: 0.0        # GFLOPs for forward pass, batch_size=1 (0 = auto-compute)
+  model_size_fp16_gb: 0.0           # Model weights size in GB (0 = auto-compute)

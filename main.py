@@ -6,13 +6,18 @@ CLI tool to compute and analyze 9 performance metrics for DNN training
 on dataflow AI accelerators (Cerebras WSE-2, SambaNova RDU, Graphcore IPU).
 
 Usage:
-  python main.py --model bert_large --hardware cerebras_wse2 --batch_size 8
-  python main.py --model resnet50 --hardware sambanova_sn30 --batch_size 32 --devices 4
-  python main.py --model gpt2_1_5b --hardware graphcore_bow_ipu --batch_size 4 --save json
-  python main.py --compare_all --batch_size 16
+  python -m dataflow_predictor.main --model bert_large --hardware cerebras_wse2
+  python -m dataflow_predictor.main --model resnet50 --hardware sambanova_sn30 --batch_size 32
+  python -m dataflow_predictor.main --model gpt2_1_5b --hardware graphcore_bow_ipu --devices 4
+  python -m dataflow_predictor.main --compare_all --batch_size 16 --save csv
 
-Available models   : resnet50, bert_large, gpt2_1_5b
+  # Add a new model — NO CODE CHANGES:
+  # 1. Copy configs/models/TEMPLATE_new_model.yaml
+  # 2. Fill it in and save as configs/models/my_model.yaml
+  # 3. Run: python -m dataflow_predictor.main --model my_model --hardware cerebras_wse2
+
 Available hardware : cerebras_wse2, sambanova_sn30, graphcore_bow_ipu
+Available models   : auto-discovered from configs/models/*.yaml
 """
 
 import argparse
@@ -23,7 +28,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from dataflow_predictor.hardware.base_hardware import load_hardware_spec, SUPPORTED_PLATFORMS
-from dataflow_predictor.models.model_zoo import get_model, MODEL_ZOO
+from dataflow_predictor.models.model_loader import (
+    get_model, list_available_models, get_training_config
+)
 from dataflow_predictor.core.compute_module import run_compute_module
 from dataflow_predictor.core.memory_module import run_memory_module
 from dataflow_predictor.core.communication_module import run_communication_module
@@ -46,12 +53,13 @@ def run_analysis(
     Run the full 9-metric analysis pipeline for one model + hardware combo.
 
     Pipeline:
-      1. Build computation graph (FLOPs annotated)
-      2. Compute Module → OLET, MFU, AI
-      3. Memory Module  → MBU, SRE, OMT
-      4. Communication Module → CCR, CCBU, SOF
-      5. Training Time → 7 equations
-      6. Report
+      1. Load model YAML → build computation graph (FLOPs annotated)
+      2. Load training config from same YAML
+      3. Compute Module → OLET, MFU, AI
+      4. Memory Module  → MBU, SRE, OMT
+      5. Communication Module → CCR, CCBU, SOF
+      6. Training Time → 7 equations
+      7. Report
     """
     print(f"\n{'='*60}")
     print(f"  Running: {model_name.upper()} on {hardware_name.upper()}")
@@ -63,12 +71,19 @@ def run_analysis(
     if verbose:
         print(hardware)
 
-    # ── 2. Build computation graph ──────────────────────────────
-    kwargs = {}
-    if "bert" in model_name or "gpt" in model_name:
-        kwargs["seq_len"] = seq_len
+    # ── 2. Build computation graph from YAML config ─────────────
+    # CLI args override YAML defaults when provided
+    graph = get_model(
+        model_name,
+        batch_size=batch_size,
+        seq_len=seq_len,
+        dtype=dtype
+    )
 
-    graph = get_model(model_name, batch_size=batch_size, dtype=dtype, **kwargs)
+    # ── 2b. Load training config from same YAML ─────────────────
+    train_cfg = get_training_config(model_name)
+    # Use training config values as fallbacks where CLI didn't specify
+    backward_ratio = train_cfg.get("backward_ratio", 2.0)
 
     if verbose:
         print("\n" + graph.summary())
@@ -155,12 +170,14 @@ def run_compare_all(
     num_devices: int, save_format: str, output_dir: str, verbose: bool
 ):
     """Run all model × hardware combinations and produce a comparison table."""
+    available_models = list_available_models()
     print("\n" + "="*70)
     print("  FULL CROSS-PLATFORM COMPARISON")
+    print(f"  Models: {list(available_models.keys())}")
     print("="*70)
 
     all_results = []
-    for model_name in MODEL_ZOO.keys():
+    for model_name in available_models.keys():
         for hardware_name in SUPPORTED_PLATFORMS:
             try:
                 result = run_analysis(
@@ -177,12 +194,12 @@ def run_compare_all(
 
     # Print comparison table
     print(f"\n{'='*100}")
-    print(f"  {'Model':<14} {'Hardware':<22} {'MFU%':>5} {'SRE%':>5} "
+    print(f"  {'Model':<18} {'Hardware':<22} {'MFU%':>5} {'SRE%':>5} "
           f"{'MBU%':>5} {'CCR':>7} {'T_eq7(ms)':>10} {'Bottleneck':>12}")
     print(f"  {'-'*98}")
     for r in all_results:
         print(
-            f"  {r['model']:<14} {r['hardware']:<22} "
+            f"  {r['model']:<18} {r['hardware']:<22} "
             f"{r['C2_mfu_pct']:>5.1f} {r['M2_sre_pct']:>5.1f} "
             f"{r['M1_mbu_pct']:>5.1f} {r['Comm1_ccr']:>7.4f} "
             f"{r['T_eq7_ms']:>10.3f} {r['bottleneck']:>12}"
@@ -191,18 +208,24 @@ def run_compare_all(
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # Dynamically discover available models from YAML files — no hardcoding
+    available_models = list(list_available_models().keys())
+
     p = argparse.ArgumentParser(
         description="Dataflow Accelerator Performance Predictor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
 
-    # Model
+    # Model — accepts ANY model_id that has a YAML in configs/models/
     p.add_argument(
         "--model", "-m",
-        choices=list(MODEL_ZOO.keys()),
         default="bert_large",
-        help="DNN model to analyze (default: bert_large)"
+        help=(
+            f"Model to analyze. Available: {available_models}. "
+            "To add a new model: copy configs/models/TEMPLATE_new_model.yaml, "
+            "fill it in, no code changes needed. (default: bert_large)"
+        )
     )
 
     # Hardware
@@ -213,14 +236,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target hardware platform (default: cerebras_wse2)"
     )
 
-    # Training config
-    p.add_argument("--batch_size", "-bs", type=int, default=8,
-                   help="Training batch size (default: 8)")
-    p.add_argument("--seq_len", "-sl", type=int, default=512,
-                   help="Sequence length for transformers (default: 512)")
+    # Training config — CLI overrides the YAML defaults
+    p.add_argument("--batch_size", "-bs", type=int, default=None,
+                   help="Batch size override (default: use model YAML value)")
+    p.add_argument("--seq_len", "-sl", type=int, default=None,
+                   help="Sequence length override for transformers (default: use YAML)")
     p.add_argument("--dtype", "-dt",
-                   choices=["fp16", "bf16", "fp32"], default="fp16",
-                   help="Data type (default: fp16)")
+                   choices=["fp16", "bf16", "fp32"], default=None,
+                   help="Data type override (default: use model YAML value)")
     p.add_argument("--devices", "-d", type=int, default=1,
                    help="Number of accelerator devices (default: 1)")
 
@@ -252,9 +275,12 @@ def main():
     args   = parser.parse_args()
 
     if args.list_models:
-        print("Available models:")
-        for m in MODEL_ZOO.keys():
-            print(f"  {m}")
+        available = list_available_models()
+        print("Available models (from configs/models/*.yaml):")
+        for mid, mname in available.items():
+            print(f"  {mid:<25} {mname}")
+        print(f"\nTo add a new model: copy configs/models/TEMPLATE_new_model.yaml")
+        print(f"Fill in your model definition — no Python code changes needed.")
         return
 
     if args.list_hardware:
@@ -263,11 +289,18 @@ def main():
             print(f"  {hw}")
         return
 
+    # Resolve batch_size and seq_len:
+    # If not provided on CLI, the model YAML defaults will be used
+    # (handled inside get_model via build_graph_from_config)
+    bs  = args.batch_size   # None = use YAML default
+    sl  = args.seq_len      # None = use YAML default
+    dt  = args.dtype        # None = use YAML default
+
     if args.compare_all:
         run_compare_all(
-            batch_size=args.batch_size,
-            seq_len=args.seq_len,
-            dtype=args.dtype,
+            batch_size=bs or 32,
+            seq_len=sl or 512,
+            dtype=dt or "fp16",
             num_devices=args.devices,
             save_format=args.save,
             output_dir=args.output_dir,
@@ -277,9 +310,9 @@ def main():
         run_analysis(
             model_name=args.model,
             hardware_name=args.hardware,
-            batch_size=args.batch_size,
-            seq_len=args.seq_len,
-            dtype=args.dtype,
+            batch_size=bs or 32,
+            seq_len=sl or 512,
+            dtype=dt or "fp16",
             num_devices=args.devices,
             save_format=args.save,
             output_dir=args.output_dir,

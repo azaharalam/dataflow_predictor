@@ -1,0 +1,62 @@
+# ============================================================
+# Hardware Specification: Cerebras CS-2 (WSE-2)
+# ============================================================
+# Sources:
+#   - Cerebras WSE-2 Official Datasheet
+#   - HC34 Hot Chips 2022 presentation
+#   - arxiv:2503.11698 (WSE-2 vs H100 comparison)
+#   - Tom's Hardware / AnandTech WSE-2 launch coverage
+#   - emergentmind.com WSE architecture overview
+# ============================================================
+
+name: "Cerebras CS-2 (WSE-2)"
+hardware_id: "cerebras_wse2"
+execution_model: "wafer_scale"
+
+# ── Compute ──────────────────────────────────────────────────
+# Cerebras does not publish peak FLOPS for training directly.
+# 125 TFLOPS is the community-validated sustained training estimate
+# from arxiv:2409.00287 (Benchmarking LLMs on Cerebras WSE).
+peak_flops_fp16: 125.0
+peak_flops_bf16: 125.0
+peak_flops_fp32: 62.5
+peak_flops_fp16_sparse: 250.0
+
+# ── On-Chip Memory ────────────────────────────────────────────
+# Confirmed from official datasheet
+num_tiles: 850000
+onchip_sram_per_tile_kb: 48
+total_onchip_sram_gb: 40.0
+
+# "20 petabytes per second" confirmed from official datasheet
+onchip_bandwidth_gbps: 20000000.0
+onchip_mesh_link_gbps: 32.0
+mesh_hop_latency_ns: 1.0
+
+# ── Off-Chip Memory ───────────────────────────────────────────
+# WSE-2 has NO attached DRAM for compute.
+# Large models use MemoryX weight streaming system.
+offchip_memory_gb: 0.0
+memoryx_bandwidth_gbps: 1200.0
+supports_weight_streaming: true
+
+# ── Multi-Device Interconnect ─────────────────────────────────
+inter_chip_bandwidth_gbps: 0.0
+inter_chip_latency_us: 0.0
+swarmx_bandwidth_gbps: 4800.0
+supports_near_linear_scaling: true
+
+# ── Execution Model ───────────────────────────────────────────
+pipeline_depth: 1
+tile_simd_width: 1
+
+# ── Physical Characteristics ──────────────────────────────────
+process_node: "7nm TSMC"
+die_size_mm2: 46225
+transistors_trillion: 2.6
+tdp_watts: 15000
+
+# ── Derived Performance Parameters ───────────────────────────
+# Using MemoryX as practical off-chip BW:
+# = 125e12 / 1.2e12 = 104 FLOP/byte
+ridge_point_flops_per_byte: 104.0

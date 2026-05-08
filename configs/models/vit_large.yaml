@@ -1,0 +1,45 @@
+# ============================================================
+# Model Definition: Vision Transformer Large (ViT-L/16)
+# ============================================================
+# Added purely via YAML — zero Python code changes required
+# ============================================================
+
+name: "ViT-Large/16"
+model_id: "vit_large"
+model_type: "transformer"
+description: "Vision Transformer ViT-L/16 image classification on ImageNet"
+
+training:
+  batch_size: 64
+  seq_len: 196                      # 14×14 patches from 224×224 image (16×16 patch size)
+  dtype: "fp16"
+  optimizer: "adamw"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "ImageNet"
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_encoder"
+
+  embedding:
+    vocab_size: 197                  # 196 patches + 1 CLS token
+    hidden_dim: 1024
+    max_seq_len: 197
+
+  encoder:
+    num_layers: 24
+    hidden_dim: 1024
+    num_heads: 16
+    head_dim: 64
+    ffn_dim: 4096
+    ffn_activation: "gelu"
+    dropout: 0.1
+    layer_norm: "pre"
+
+stats:
+  total_params_M: 307.0
+  total_flops_forward_G: 61.6
+  model_size_fp16_gb: 0.586

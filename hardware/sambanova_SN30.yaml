@@ -1,0 +1,70 @@
+# ============================================================
+# Hardware Specification: SambaNova DataScale SN30 (Cardinal RDU)
+# ============================================================
+# Sources:
+#   - NextPlatform SN30 launch coverage (Sep 2022)
+#   - EE Times SN30 technical analysis
+#   - The Register SN30 review
+#   - HPCwire SN30 launch article
+#   - arxiv:2311.04417 (IPU/RDU/GPU evaluation)
+#   - FiberMall DSA analysis (SN10 confirmed, SN30 = 2x SN10)
+#   - SambaNova official docs (docs-legacy.sambanova.ai)
+#
+# ARCHITECTURE NOTE:
+#   SN30 = 2 x SN10 chiplets in one Die-to-Die package (7nm TSMC)
+#   SN10 confirmed: 640 PCUs, 640 PMUs, 320 MB SRAM, 320 TFLOPS BF16
+#   SN30 = 2x SN10: 1280 PCUs, 1280 PMUs, 640 MB SRAM, 688 TFLOPS BF16
+# ============================================================
+
+name: "SambaNova DataScale SN30 (Cardinal RDU)"
+hardware_id: "sambanova_sn30"
+execution_model: "dataflow"
+
+# ── Compute ───────────────────────────────────────────────────
+# "688 teraflops at BF16" confirmed: NextPlatform, EE Times,
+# The Register, HPCwire
+peak_flops_bf16: 688.0
+peak_flops_fp16: 688.0
+peak_flops_fp32: 344.0
+
+# ── Architecture ──────────────────────────────────────────────
+num_pcus: 1280
+num_pmus: 1280
+pcu_simd_stages: 6
+pcu_simd_lanes: 16
+functional_units_per_pcu: 96
+pmu_size_kb: 500
+
+# ── On-Chip Memory ────────────────────────────────────────────
+# 640 MB confirmed: NextPlatform, The Register, EE Times
+# SN10 had 320 MB (confirmed). SN30 = 2x = 640 MB.
+total_onchip_sram_gb: 0.640
+# SN10 had 150 TB/s (confirmed). SN30 = 2x = 300 TB/s.
+onchip_bandwidth_gbps: 300000.0
+
+# ── Off-Chip Memory ───────────────────────────────────────────
+# IMPORTANT: SN30 has DDR ONLY — no HBM (HBM was added in SN40L)
+# "3 TB of DDR memory directly accessible per socket" confirmed
+hbm_gb: 0.0
+hbm_bandwidth_gbps: 0.0
+ddr_gb: 3000.0
+ddr_bandwidth_gbps: 200.0
+offchip_memory_gb: 3000.0
+
+# ── Multi-Device Interconnect ─────────────────────────────────
+inter_chip_bandwidth_gbps: 400.0
+inter_chip_latency_us: 2.0
+
+# ── Execution Model ───────────────────────────────────────────
+pipeline_depth: 100
+supports_operator_fusion: true
+
+# ── Physical Characteristics ──────────────────────────────────
+process_node: "7nm TSMC"
+transistors_billion: 86
+tdp_watts: 3500
+
+# ── Derived Performance Parameters ───────────────────────────
+# Using DDR BW as practical bottleneck:
+# = 688e12 / 200e9 = 3440 FLOP/byte
+ridge_point_flops_per_byte: 3440.0

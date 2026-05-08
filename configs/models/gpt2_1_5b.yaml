@@ -1,0 +1,45 @@
+# ============================================================
+# Model Definition: GPT-2 1.5B
+# ============================================================
+
+name: "GPT-2 1.5B"
+model_id: "gpt2_1_5b"
+model_type: "transformer"
+description: "GPT-2 1.5B autoregressive language model"
+
+training:
+  batch_size: 4
+  seq_len: 1024
+  dtype: "fp16"
+  optimizer: "adamw"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: true
+  checkpointing_memory_factor: 0.3
+  dataset: "OpenWebText2"
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_decoder"
+
+  embedding:
+    vocab_size: 50257
+    hidden_dim: 1600
+    max_seq_len: 1024
+
+  decoder:
+    num_layers: 48
+    hidden_dim: 1600
+    num_heads: 25
+    head_dim: 64                      # 1600 / 25
+    ffn_dim: 6400                     # 4 × 1600
+    ffn_activation: "gelu"
+    dropout: 0.1
+    layer_norm: "pre"                 # Pre-LN (GPT-2 style)
+    causal_attention: true            # Causal masking for autoregressive
+
+stats:
+  total_params_M: 1542.0
+  total_flops_forward_G: 1540.0       # GFLOPs for batch=1, seq=1024
+  model_size_fp16_gb: 2.944

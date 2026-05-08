@@ -1,0 +1,69 @@
+# ============================================================
+# Model Definition: ResNet-50 v1.5
+# ============================================================
+# This single file fully defines the model architecture AND
+# training configuration. No Python code changes needed.
+# Drop this file in configs/models/ and it is immediately
+# available via: python -m dataflow_predictor.main --model resnet50
+# ============================================================
+
+# ── Identity ─────────────────────────────────────────────────
+name: "ResNet-50 v1.5"
+model_id: "resnet50"              # Used as --model argument on CLI
+model_type: "cnn"                 # cnn | transformer | mlp | custom
+description: "ResNet-50 v1.5 image classification on ImageNet"
+
+# ── Training Configuration ────────────────────────────────────
+training:
+  batch_size: 256
+  dtype: "fp16"
+  optimizer: "sgd"
+  optimizer_memory_multiplier: 1.0    # SGD+momentum = 1× weight bytes
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "ImageNet"
+  input_shape: [3, 224, 224]
+  num_classes: 1000
+  backward_ratio: 1.9                 # T_backward / T_forward
+
+# ── Architecture Definition ───────────────────────────────────
+# Define the model as a sequence of blocks.
+# The generic graph builder reads this and constructs
+# the computation graph automatically — no Python needed.
+architecture:
+  type: "resnet"                      # Tells graph builder which template to use
+
+  # ResNet-specific parameters
+  stem:
+    type: conv_bn_relu
+    in_channels: 3
+    out_channels: 64
+    kernel: 7
+    stride: 2
+    padding: 3
+    input_h: 224
+    input_w: 224
+
+  maxpool:
+    kernel: 3
+    stride: 2
+    padding: 1
+
+  # Stage definitions: [num_blocks, mid_channels, out_channels, height, width]
+  stages:
+    - {num_blocks: 3, mid_channels: 64,  out_channels: 256,  height: 56, width: 56}
+    - {num_blocks: 4, mid_channels: 128, out_channels: 512,  height: 28, width: 28}
+    - {num_blocks: 6, mid_channels: 256, out_channels: 1024, height: 14, width: 14}
+    - {num_blocks: 3, mid_channels: 512, out_channels: 2048, height: 7,  width: 7}
+
+  head:
+    type: linear
+    in_features: 2048
+    out_features: 1000
+
+# ── Model Statistics (for quick reference and validation) ─────
+stats:
+  total_params_M: 25.6
+  total_flops_forward_G: 8.2          # GFLOPs for batch_size=1
+  model_size_fp16_gb: 0.049           # 25.6M × 2 bytes
