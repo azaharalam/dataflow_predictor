@@ -17,7 +17,52 @@ dataflow AI accelerators: **Cerebras WSE-2**, **SambaNova SN30 RDU**, **Graphcor
 | Communication | Comm2 | CCBU | Collective Communication BW Utilization |
 | Communication | Comm3 | SOF | Synchronization Overhead Fraction |
 
-Plus **7 training time prediction equations** using different modeling philosophies.
+## Metric Dependency
+
+HARDWARE SPEC ──────────────────────────────────────────────────┐
+                                                                 │
+GRAPH (tensor shapes, FLOPs) ──────────────────────────────────┐│
+                                                                ││
+                    ┌──────────────────────────────────────────┘│
+                    │                                            │
+                    ▼                                            │
+            ┌─────────────┐                                      │
+            │  C3 (AI)    │◄────────────────────────────────────┤
+            │ independent │                                      │
+            └──────┬──────┘                                      │
+                   │                                             │
+                   ▼                                             │
+            ┌─────────────┐    uses simplified BW               │
+            │  C1 (OLET)  │◄────────────────────────────────────┤
+            │  T_compute  │    (should use SRE but doesn't yet) │
+            └──────┬──────┘                                      │
+                   │                                             │
+          ┌────────┴────────┐                                    │
+          │                 │                                    │
+          ▼                 ▼                                    │
+   ┌─────────────┐   ┌─────────────┐                            │
+   │  C2 (MFU)  │   │  Comm1 CCR  │                            │
+   │            │   │  Comm3 SOF  │                            │
+   └─────────────┘   └──────┬──────┘                            │
+                             │                                   │
+          ┌──────────────────┘                                   │
+          │                                                      │
+          ▼                                                      │
+   ┌─────────────┐                                               │
+   │  M2 (SRE)   │◄────────────────────────────────────────────┘
+   │  (reuse     │
+   │  factors    │
+   │  hardcoded) │
+   └──────┬──────┘
+          │
+     ┌────┴────┐
+     │         │
+     ▼         ▼
+┌─────────┐ ┌──────┐
+│ M1(MBU) │ │M3(OMT│
+│uses C1  │ │      │
+│+M2(SRE) │ │      │
+└─────────┘ └──────┘
 
 ## Installation
 
