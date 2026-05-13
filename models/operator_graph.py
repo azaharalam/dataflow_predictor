@@ -126,20 +126,69 @@ class OperatorNode:
     @property
     def arithmetic_intensity(self) -> float:
         """
-        Arithmetic Intensity = FLOPs / bytes accessed.
-        This is the C3 metric (AI) from the research plan.
+        Arithmetic Intensity for forward pass only.
+        AI = FLOPs_forward / bytes_accessed_forward
+        Used for: inference, roofline baseline comparison.
         """
         total_bytes = self.total_bytes_accessed
         if total_bytes == 0:
             return 0.0
         return self.flops_forward / total_bytes
 
+    @property
+    def total_bytes_accessed_training(self) -> int:
+        """
+        Total bytes accessed for one full training step
+        (forward pass + backward pass combined).
+
+        Forward pass:
+          - Read:  input tensors, weight tensors
+          - Write: output tensors
+
+        Backward pass:
+          - Read:  output gradients (same size as outputs)
+          - Read:  weight tensors again (needed to compute input grad)
+          - Write: input gradients (same size as inputs)
+          - Write: weight gradients (same size as weights)
+
+        Total = 3 * input_bytes + 3 * weight_bytes + 2 * output_bytes
+        """
+        input_bytes  = sum(s.size_bytes for s in self.input_shapes)
+        output_bytes = sum(s.size_bytes for s in self.output_shapes)
+        weight_bytes = sum(s.size_bytes for s in self.weight_shapes)
+
+        fwd_bytes = input_bytes + output_bytes + weight_bytes
+        bwd_bytes = (
+            output_bytes   # read output gradients
+            + weight_bytes # read weights again for input grad computation
+            + input_bytes  # write input gradients
+            + weight_bytes # write weight gradients
+        )
+        return fwd_bytes + bwd_bytes
+
+    @property
+    def arithmetic_intensity_training(self) -> float:
+        """
+        Arithmetic Intensity for full training step.
+        AI_train = (FLOPs_forward + FLOPs_backward) / bytes_training
+
+        This is the correct AI to use for training time prediction
+        and for classify operators as compute-bound vs memory-bound
+        during training.
+        """
+        total_bytes = self.total_bytes_accessed_training
+        if total_bytes == 0:
+            return 0.0
+        total_flops = self.flops_forward + self.flops_backward
+        return total_flops / total_bytes
+
     def is_compute_bound(self, ridge_point: float) -> bool:
         """
-        Returns True if operator is compute-bound on hardware
-        with given ridge_point (FLOP/byte).
+        Returns True if operator is compute-bound during training
+        on hardware with given ridge_point (FLOP/byte).
+        Uses training AI (forward + backward) not inference AI.
         """
-        return self.arithmetic_intensity > ridge_point
+        return self.arithmetic_intensity_training > ridge_point
 
     def __str__(self) -> str:
         return (

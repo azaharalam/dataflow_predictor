@@ -14,10 +14,10 @@ Supported models:
   - BraggNN
 """
 
-from .operator_graph import (
+from models.operator_graph import (
     ComputationGraph, OperatorNode, OperatorType, TensorShape
 )
-from .flops_counter import compute_flops
+from models.flops_counter import compute_flops
 
 
 def _make_tensor(dims: list, dtype: str = "fp16") -> TensorShape:

@@ -11,10 +11,10 @@ import os
 from typing import List, Optional, Dict
 from datetime import datetime
 
-from ..core.compute_module import ComputeMetrics
-from ..core.memory_module import MemoryMetrics
-from ..core.communication_module import CommMetrics
-from ..core.training_time import TrainingTimePrediction
+from core.compute_module import ComputeMetrics
+from core.memory_module import MemoryMetrics
+from core.communication_module import CommMetrics
+from core.training_time import TrainingTimePrediction
 
 
 class Reporter:

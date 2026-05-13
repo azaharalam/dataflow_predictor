@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 import math
 
-from ..models.operator_graph import ComputationGraph
-from ..hardware.base_hardware import HardwareSpec
+from models.operator_graph import ComputationGraph
+from hardware.base_hardware import HardwareSpec
 from .compute_module import ComputeMetrics
 from .memory_module import MemoryMetrics
 from .communication_module import CommMetrics

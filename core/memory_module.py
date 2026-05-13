@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional
 import math
 
-from ..models.operator_graph import ComputationGraph, OperatorNode
-from ..hardware.base_hardware import HardwareSpec
+from models.operator_graph import ComputationGraph, OperatorNode
+from hardware.base_hardware import HardwareSpec
 
 
 @dataclass

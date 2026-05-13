@@ -12,7 +12,7 @@ Rules:
 """
 
 from typing import List, Dict, Tuple, Optional
-from .operator_graph import OperatorNode, OperatorType, TensorShape, ComputationGraph
+from models.operator_graph import OperatorNode, OperatorType, TensorShape, ComputationGraph
 
 
 class FLOPsCounter:

@@ -1,11 +1,18 @@
 """
 hardware/base_hardware.py
-Abstract base class for all AI accelerator hardware platforms.
-Each platform subclass instantiates the spec values and
-overrides execution-model-specific behaviour.
+
+Hardware specification loader.
+
+Each platform has its own dedicated YAML file in configs/hardware/:
+  configs/hardware/cerebras_wse2.yaml
+  configs/hardware/sambanova_sn30.yaml
+  configs/hardware/graphcore_bow_ipu.yaml
+
+To add a new platform: create configs/hardware/new_platform.yaml
+No Python code changes needed.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 import yaml
 import os
@@ -18,22 +25,22 @@ class HardwareSpec:
     All bandwidth in GB/s. Memory in GB. FLOPS in TFLOPS.
     """
     name: str
-    execution_model: str                    # 'wafer_scale' | 'dataflow' | 'bsp'
+    execution_model: str                     # 'wafer_scale' | 'dataflow' | 'bsp'
 
     # Compute
-    peak_flops_fp16: float                  # TFLOPS
+    peak_flops_fp16: float                   # TFLOPS
     peak_flops_bf16: float
     peak_flops_fp32: float
 
     # On-chip memory
     total_onchip_sram_gb: float
-    onchip_bandwidth_gbps: float            # GB/s
+    onchip_bandwidth_gbps: float             # GB/s
 
     # Off-chip memory
     offchip_memory_gb: float
     offchip_bandwidth_gbps: float = 0.0
 
-    # Multi-tier (SambaNova specific, optional for others)
+    # Multi-tier memory
     hbm_gb: float = 0.0
     hbm_bandwidth_gbps: float = 0.0
     ddr_gb: float = 0.0
@@ -45,7 +52,7 @@ class HardwareSpec:
 
     # Execution model parameters
     pipeline_depth: int = 1
-    ridge_point_flops_per_byte: float = 1.0  # Peak TFLOPS / Peak BW (TBPS)
+    ridge_point_flops_per_byte: float = 1.0
     supports_weight_streaming: bool = False
     supports_operator_fusion: bool = False
 
@@ -80,27 +87,35 @@ class HardwareSpec:
 
     def effective_offchip_bandwidth(self) -> float:
         """
-        For multi-tier systems (SambaNova), return the
-        effective off-chip bandwidth considering tier hierarchy.
-        For single-tier, same as offchip_bandwidth_gbps.
+        Return effective off-chip bandwidth in bytes/sec.
+
+        Priority order:
+          1. HBM  — if present (SambaNova SN40L)
+          2. DDR  — if present (SambaNova SN30, Graphcore)
+          3. Generic offchip — fallback (Cerebras MemoryX)
         """
         if self.hbm_bandwidth_gbps > 0:
-            # HBM is the first off-chip tier — return HBM bandwidth
             return self.hbm_bandwidth_gbps * 1e9
+        if self.ddr_bandwidth_gbps > 0:
+            return self.ddr_bandwidth_gbps * 1e9
         return self.offchip_bandwidth_gbps * 1e9
 
     def memory_tiers(self) -> list:
         """
-        Return ordered list of (name, capacity_gb, bandwidth_gbps) tuples.
-        First tier is always on-chip (fastest). Last is slowest.
+        Return ordered list of (name, capacity_gb, bandwidth_gbps).
+        First entry is always on-chip (fastest).
         """
-        tiers = [("onchip_sram", self.total_onchip_sram_gb, self.onchip_bandwidth_gbps)]
+        tiers = [("onchip_sram",
+                  self.total_onchip_sram_gb,
+                  self.onchip_bandwidth_gbps)]
         if self.hbm_gb > 0:
             tiers.append(("hbm", self.hbm_gb, self.hbm_bandwidth_gbps))
         if self.ddr_gb > 0:
             tiers.append(("ddr", self.ddr_gb, self.ddr_bandwidth_gbps))
         elif self.offchip_memory_gb > 0:
-            bw = self.offchip_bandwidth_gbps if self.offchip_bandwidth_gbps > 0 else self.effective_offchip_bandwidth() / 1e9
+            bw = (self.offchip_bandwidth_gbps
+                  if self.offchip_bandwidth_gbps > 0
+                  else self.effective_offchip_bandwidth() / 1e9)
             tiers.append(("offchip_dram", self.offchip_memory_gb, bw))
         return tiers
 
@@ -112,40 +127,76 @@ class HardwareSpec:
             f"  On-chip SRAM    : {self.total_onchip_sram_gb:.3f} GB\n"
             f"  On-chip BW      : {self.onchip_bandwidth_gbps:.1f} GB/s\n"
             f"  Off-chip mem    : {self.offchip_memory_gb:.1f} GB\n"
+            f"  DDR BW          : {self.ddr_bandwidth_gbps:.1f} GB/s\n"
             f"  Inter-chip BW   : {self.inter_chip_bandwidth_gbps:.1f} GB/s\n"
-            f"  Ridge point     : {self.ridge_point_flops_per_byte:.1f} FLOP/byte\n"
+            f"  Ridge point     : {self.ridge_point_flops_per_byte:.2f} FLOP/byte\n"
         )
 
 
-def load_hardware_spec(platform: str, config_path: Optional[str] = None) -> HardwareSpec:
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-file loader — reads from configs/hardware/{platform}.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _hardware_dir() -> str:
+    """Return absolute path to configs/hardware/ directory."""
+    return os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "configs", "hardware"
+    )
+
+
+def list_available_hardware() -> list:
     """
-    Load hardware spec from YAML config file.
+    Scan configs/hardware/ and return list of hardware_ids.
+    Auto-discovers any new .yaml files — no code changes needed.
+    """
+    d = _hardware_dir()
+    if not os.path.isdir(d):
+        return []
+    platforms = []
+    for fname in sorted(os.listdir(d)):
+        if fname.endswith(".yaml"):
+            fpath = os.path.join(d, fname)
+            try:
+                with open(fpath) as f:
+                    cfg = yaml.safe_load(f)
+                hw_id = cfg.get("hardware_id", fname.replace(".yaml", ""))
+                platforms.append(hw_id)
+            except Exception:
+                pass
+    return platforms
+
+
+def load_hardware_spec(platform: str) -> HardwareSpec:
+    """
+    Load hardware spec from configs/hardware/{platform}.yaml
+
+    Each platform has its own dedicated YAML file.
+    To add a new platform: create configs/hardware/new_platform.yaml
+    No Python code changes needed.
 
     Args:
-        platform: One of 'cerebras_wse2', 'sambanova_sn30', 'graphcore_bow_ipu'
-        config_path: Path to hardware_specs.yaml. Defaults to configs/hardware_specs.yaml
+        platform: hardware_id matching the YAML filename
+                  e.g. 'cerebras_wse2', 'sambanova_sn30', 'graphcore_bow_ipu'
 
     Returns:
         HardwareSpec instance
     """
-    if config_path is None:
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "configs", "hardware_specs.yaml"
+    d = _hardware_dir()
+    fpath = os.path.join(d, f"{platform}.yaml")
+
+    if not os.path.isfile(fpath):
+        available = list_available_hardware()
+        raise FileNotFoundError(
+            f"Hardware spec '{platform}' not found.\n"
+            f"Expected file : {fpath}\n"
+            f"Available     : {available}\n"
+            f"To add a new platform: create configs/hardware/{platform}.yaml"
         )
 
-    with open(config_path, "r") as f:
-        specs = yaml.safe_load(f)
+    with open(fpath, "r") as f:
+        s = yaml.safe_load(f)
 
-    if platform not in specs:
-        available = list(specs.keys())
-        raise ValueError(
-            f"Platform '{platform}' not found. Available: {available}"
-        )
-
-    s = specs[platform]
-
-    # Build HardwareSpec — map YAML keys to dataclass fields
     return HardwareSpec(
         name=s.get("name", platform),
         execution_model=s.get("execution_model", "unknown"),
@@ -153,8 +204,7 @@ def load_hardware_spec(platform: str, config_path: Optional[str] = None) -> Hard
         peak_flops_bf16=s.get("peak_flops_bf16", 0.0),
         peak_flops_fp32=s.get("peak_flops_fp32", 0.0),
         total_onchip_sram_gb=s.get("total_onchip_sram_gb", 0.0),
-        onchip_bandwidth_gbps=s.get("onchip_bandwidth_gbps",
-                                    s.get("onchip_bandwidth_tbps", 0.0) * 1000),
+        onchip_bandwidth_gbps=s.get("onchip_bandwidth_gbps", 0.0),
         offchip_memory_gb=s.get("offchip_memory_gb", 0.0),
         offchip_bandwidth_gbps=s.get("offchip_bandwidth_gbps",
                                      s.get("memoryx_bandwidth_gbps", 0.0)),
@@ -179,4 +229,7 @@ def load_hardware_spec(platform: str, config_path: Optional[str] = None) -> Hard
     )
 
 
-SUPPORTED_PLATFORMS = ["cerebras_wse2", "sambanova_sn30", "graphcore_bow_ipu"]
+# Auto-discovered from configs/hardware/ — no hardcoded list
+SUPPORTED_PLATFORMS = list_available_hardware() or [
+    "cerebras_wse2", "sambanova_sn30", "graphcore_bow_ipu"
+]

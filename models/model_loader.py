@@ -19,10 +19,10 @@ import os
 import yaml
 from typing import Dict, Optional, List, Any
 
-from .operator_graph import (
+from models.operator_graph import (
     ComputationGraph, OperatorNode, OperatorType, TensorShape
 )
-from .flops_counter import compute_flops
+from models.flops_counter import compute_flops
 
 
 # ─────────────────────────────────────────────────────────────────────────────

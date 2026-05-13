@@ -27,15 +27,15 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from dataflow_predictor.hardware.base_hardware import load_hardware_spec, SUPPORTED_PLATFORMS
-from dataflow_predictor.models.model_loader import (
+from hardware.base_hardware import load_hardware_spec, SUPPORTED_PLATFORMS
+from models.model_loader import (
     get_model, list_available_models, get_training_config
 )
-from dataflow_predictor.core.compute_module import run_compute_module
-from dataflow_predictor.core.memory_module import run_memory_module
-from dataflow_predictor.core.communication_module import run_communication_module
-from dataflow_predictor.core.training_time import predict_training_time
-from dataflow_predictor.analysis.reporter import Reporter
+from core.compute_module import run_compute_module
+from core.memory_module import run_memory_module
+from core.communication_module import run_communication_module
+from core.training_time import predict_training_time
+from analysis.reporter import Reporter
 
 
 def run_analysis(

@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Tuple
 import math
 
-from ..models.operator_graph import ComputationGraph, OperatorNode, OperatorType
-from ..hardware.base_hardware import HardwareSpec
+from models.operator_graph import ComputationGraph, OperatorNode, OperatorType
+from hardware.base_hardware import HardwareSpec
 
 
 @dataclass
@@ -57,10 +57,12 @@ class ComputeMetrics:
 
     # C3 — AI: Arithmetic Intensity distribution
     ai_per_operator: Dict[str, float] = field(default_factory=dict)
-    ai_weighted_average: float = 0.0      # Weighted by FLOP contribution
-    ai_ridge_point: float = 0.0          # Hardware ridge point
-    fraction_compute_bound: float = 0.0  # Fraction of FLOPs in compute-bound ops
-    fraction_memory_bound: float = 0.0   # Fraction of FLOPs in memory-bound ops
+    ai_weighted_average: float = 0.0     # Training AI weighted by FLOP contribution
+    ai_harmonic_mean: float = 0.0        # Harmonic mean — reflects bottleneck ops
+    ai_forward_weighted: float = 0.0     # Forward-only AI for inference comparison
+    ai_ridge_point: float = 0.0          # Hardware ridge point (FLOP/byte)
+    fraction_compute_bound: float = 0.0  # Fraction of training FLOPs compute-bound
+    fraction_memory_bound: float = 0.0   # Fraction of training FLOPs memory-bound
 
     # Pipeline efficiency (internal, used by training time equations)
     pipeline_fill_efficiency: float = 1.0  # SPU: T_steady / T_total
@@ -93,7 +95,9 @@ class ComputeMetrics:
             f"  Predicted MFU               : {self.mfu_predicted*100:.2f}%",
             f"  Pipeline fill efficiency    : {self.pipeline_fill_efficiency*100:.2f}%",
             f"\n[C3] Arithmetic Intensity (AI)",
-            f"  Weighted average AI         : {self.ai_weighted_average:.2f} FLOP/byte",
+            f"  Weighted avg AI (training)  : {self.ai_weighted_average:.2f} FLOP/byte",
+            f"  Harmonic mean AI (training) : {self.ai_harmonic_mean:.2f} FLOP/byte",
+            f"  Weighted avg AI (fwd only)  : {self.ai_forward_weighted:.2f} FLOP/byte",
             f"  Ridge point                 : {self.ai_ridge_point:.2f} FLOP/byte",
             f"  Compute-bound FLOPs fraction: {self.fraction_compute_bound*100:.1f}%",
             f"  Memory-bound FLOPs fraction : {self.fraction_memory_bound*100:.1f}%",
@@ -141,41 +145,90 @@ class ComputeModule:
     # C3: Arithmetic Intensity
     # ─────────────────────────────────────────────────────────
 
+    
     def _compute_arithmetic_intensity(
         self, graph: ComputationGraph, metrics: ComputeMetrics
     ):
         """
         C3 — Arithmetic Intensity per operator.
 
-        AI(op) = FLOPs(op) / total_bytes_accessed(op)
+        Two AI values computed per operator:
+          AI_forward  = FLOPs_forward / bytes_forward
+                        (inference AI — forward pass only)
+          AI_training = (FLOPs_forward + FLOPs_backward) / bytes_training
+                        (training AI — used for compute-bound classification)
 
-        Weighted average AI = Σ FLOPs(op) / Σ bytes(op)
+        Three aggregate values reported:
+          ai_weighted_average : total_training_flops / total_training_bytes
+                                (dominated by high-FLOP operators like GEMM)
+          ai_harmonic_mean    : N / Σ(1/AI_training(op))
+                                (reflects bottleneck behavior — dominated
+                                 by low-AI operators like LayerNorm)
+          ai_forward_weighted : total_forward_flops / total_forward_bytes
+                                (for comparison with inference roofline tools)
         """
         metrics.ai_ridge_point = self.hw.ridge_point_flops_per_byte
 
-        total_flops   = 0.0
-        total_bytes   = 0.0
-        compute_bound_flops = 0.0
-        memory_bound_flops  = 0.0
+        total_training_flops = 0.0
+        total_training_bytes = 0.0
+        total_forward_flops  = 0.0
+        total_forward_bytes  = 0.0
+        compute_bound_flops  = 0.0
+        memory_bound_flops   = 0.0
+        reciprocal_sum       = 0.0
+        valid_op_count       = 0
 
         for op in graph.operators:
-            ai = op.arithmetic_intensity
-            metrics.ai_per_operator[op.op_id] = ai
-            total_flops += op.flops_forward
-            total_bytes += op.total_bytes_accessed
+            # Training AI — used for classification and training time prediction
+            ai_train = op.arithmetic_intensity_training
+            # Forward-only AI — stored for reference and roofline comparison
+            ai_fwd   = op.arithmetic_intensity
 
-            if ai >= metrics.ai_ridge_point:
-                compute_bound_flops += op.flops_forward
+            metrics.ai_per_operator[op.op_id] = ai_train
+
+            total_training_flops += (op.flops_forward + op.flops_backward)
+            total_training_bytes += op.total_bytes_accessed_training
+            total_forward_flops  += op.flops_forward
+            total_forward_bytes  += op.total_bytes_accessed
+
+            # Compute-bound classification uses training AI
+            if ai_train >= metrics.ai_ridge_point:
+                compute_bound_flops += (op.flops_forward + op.flops_backward)
             else:
-                memory_bound_flops += op.flops_forward
+                memory_bound_flops  += (op.flops_forward + op.flops_backward)
 
-        # Weighted average: total FLOPs / total bytes
+            # Accumulate for harmonic mean (skip zero-FLOP ops like reshape)
+            if ai_train > 0:
+                reciprocal_sum += 1.0 / ai_train
+                valid_op_count += 1
+
+        # Weighted average AI (training) — total FLOPs / total bytes
         metrics.ai_weighted_average = (
-            total_flops / total_bytes if total_bytes > 0 else 0.0
+            total_training_flops / total_training_bytes
+            if total_training_bytes > 0 else 0.0
         )
-        if total_flops > 0:
-            metrics.fraction_compute_bound = compute_bound_flops / total_flops
-            metrics.fraction_memory_bound  = memory_bound_flops  / total_flops
+
+        # Harmonic mean AI — reflects bottleneck, dominated by low-AI operators
+        metrics.ai_harmonic_mean = (
+            valid_op_count / reciprocal_sum
+            if reciprocal_sum > 0 else 0.0
+        )
+
+        # Forward-only weighted average — for roofline/inference comparison
+        metrics.ai_forward_weighted = (
+            total_forward_flops / total_forward_bytes
+            if total_forward_bytes > 0 else 0.0
+        )
+
+        if total_training_flops > 0:
+            metrics.fraction_compute_bound = (
+                compute_bound_flops / total_training_flops
+            )
+            metrics.fraction_memory_bound = (
+                memory_bound_flops / total_training_flops
+            )
+
+
 
     # ─────────────────────────────────────────────────────────
     # C1: Operator-Level Execution Time
