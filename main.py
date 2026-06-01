@@ -36,6 +36,10 @@ from core.memory_module import run_memory_module
 from core.communication_module import run_communication_module
 from core.training_time import predict_training_time
 from analysis.reporter import Reporter
+from validation.c3_validator import (
+    validate_graphcore, validate_sambanova, validate_cerebras,
+    load_measurements_csv, print_collection_guide, C3ValidationReport
+)
 
 
 def run_analysis(
@@ -267,6 +271,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list_hardware", action="store_true",
                    help="List available hardware platforms and exit")
 
+
+    # C3 Validation
+    p.add_argument("--validate_c3", action="store_true",
+                   help="Run C3 classification accuracy validation")
+    p.add_argument("--measurements_file", type=str, default="",
+                   help="Path to CSV with profiler measurements "
+                        "(Graphcore: PopVision export; SambaNova: SambaTune section report)")
+    p.add_argument("--flops_utilization", type=float, default=-1.0,
+                   help="Cerebras only: flops_utilization from cstorch profiler [0-1]")
+    p.add_argument("--c3_guide", action="store_true",
+                   help="Print measurement collection guide for the selected platform")
+
+
     return p
 
 
@@ -296,6 +313,21 @@ def main():
     sl  = args.seq_len      # None = use YAML default
     dt  = args.dtype        # None = use YAML default
 
+    #C3- Arithmatic Intensity Validation command
+    if args.validate_c3 or args.c3_guide:
+        run_c3_validation(
+            model_name=args.model,
+            hardware_name=args.hardware,
+            batch_size=bs or 32,
+            seq_len=sl or 512,
+            dtype=dt or "fp16",
+            measurements_file=args.measurements_file,
+            flops_utilization=args.flops_utilization,
+            guide=args.c3_guide,
+        )
+        return
+
+
     if args.compare_all:
         run_compare_all(
             batch_size=bs or 32,
@@ -318,6 +350,67 @@ def main():
             output_dir=args.output_dir,
             verbose=args.verbose,
         )
+
+
+def run_c3_validation(
+    model_name: str,
+    hardware_name: str,
+    batch_size: int,
+    seq_len: int,
+    dtype: str,
+    measurements_file: str,
+    flops_utilization: float,
+    guide: bool,
+):
+    """
+    Run C3 classification accuracy validation for a given platform.
+
+    Loads measurements from CSV (Graphcore / SambaNova) or uses a
+    single float (Cerebras flops_utilization), compares against
+    predicted compute-bound / memory-bound classification, and
+    prints the classification accuracy report.
+    """
+    if guide:
+        print_collection_guide(hardware_name, model_name)
+        return
+
+    # Build graph and run compute module to get predictions
+    hardware = load_hardware_spec(hardware_name)
+    graph    = get_model(model_name, batch_size=batch_size,
+                         seq_len=seq_len, dtype=dtype)
+    compute_metrics = run_compute_module(graph, hardware)
+
+    # Platform-specific validation
+    if hardware_name == "graphcore_bow_ipu":
+        if not measurements_file:
+            print("ERROR: --measurements_file required for Graphcore validation.")
+            print("Run with --c3_guide to see collection instructions.")
+            return
+        measurements = load_measurements_csv(measurements_file)
+        report = validate_graphcore(compute_metrics, graph, hardware, measurements)
+
+    elif hardware_name == "sambanova_sn30":
+        if not measurements_file:
+            print("ERROR: --measurements_file required for SambaNova validation.")
+            print("Run with --c3_guide to see collection instructions.")
+            return
+        sections = load_measurements_csv(measurements_file)
+        report   = validate_sambanova(compute_metrics, graph, hardware, sections)
+
+    elif hardware_name == "cerebras_wse2":
+        if flops_utilization < 0:
+            print("ERROR: --flops_utilization required for Cerebras validation.")
+            print("Run with --c3_guide to see collection instructions.")
+            return
+        report = validate_cerebras(
+            compute_metrics, graph, hardware, flops_utilization
+        )
+
+    else:
+        print(f"ERROR: Unknown hardware '{hardware_name}'")
+        return
+
+    report.print_report()
 
 
 if __name__ == "__main__":
