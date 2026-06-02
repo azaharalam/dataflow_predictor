@@ -1,0 +1,56 @@
+# ============================================================
+# Model Definition: ViT-Base/16
+# ============================================================
+
+name: "ViT-Base"
+model_id: "vit_base"
+model_type: "transformer"
+description: "Vision Transformer ViT-Base/16 trained on ImageNet"
+
+training:
+  batch_size: 256
+  seq_len: 197                        # 196 patches (14x14) + 1 CLS token
+  dtype: "fp16"
+  optimizer: "adamw"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "vision_transformer"       # ImageNet-1K
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_encoder"
+
+  patch_embedding:
+    image_size: 224
+    patch_size: 16
+    num_patches: 196                  # (224/16)^2
+    in_channels: 3
+    hidden_dim: 768
+
+  embedding:
+    vocab_size: 0                     # No token vocabulary (image patches)
+    hidden_dim: 768
+    max_seq_len: 197
+    cls_token: true
+    pos_embedding: "learned"
+
+  encoder:
+    num_layers: 12
+    hidden_dim: 768
+    num_heads: 12
+    head_dim: 64                      # 768 / 12
+    ffn_dim: 3072                     # 4 × 768
+    ffn_activation: "gelu"
+    dropout: 0.1
+    layer_norm: "pre"
+
+  classifier:
+    in_features: 768
+    num_classes: 1000
+
+stats:
+  total_params_M: 86.6
+  total_flops_forward_G: 35.2         # GFLOPs for batch=1
+  model_size_fp16_gb: 0.165

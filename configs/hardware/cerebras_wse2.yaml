@@ -50,6 +50,14 @@ supports_near_linear_scaling: true
 pipeline_depth: 1
 tile_simd_width: 1
 
+# Spatial dataflow efficiency η_spatial:
+# Fraction of theoretical spatial parallelism actually achieved.
+# Captures intra-layer serialization, compiler stalls, and memory
+# access overlap limits within a single pipeline stage.
+# Calibrated from GPT-3 2.7B benchmark: measured/theoretical = 1/1.87 ≈ 0.53
+# Conservative initial value — will be refined across all 8 benchmarks.
+spatial_dataflow_efficiency: 0.53
+
 # ── Physical Characteristics ──────────────────────────────────
 process_node: "7nm TSMC"
 die_size_mm2: 46225

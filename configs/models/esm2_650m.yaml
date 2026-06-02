@@ -1,0 +1,45 @@
+# ============================================================
+# Model Definition: ESM2-650M
+# ============================================================
+
+name: "ESM2-650M"
+model_id: "esm2_650m"
+model_type: "transformer"
+description: "Meta ESM2 650M protein language model (encoder-only, masked LM)"
+
+training:
+  batch_size: 16
+  seq_len: 1024                       # Typical protein sequence length
+  dtype: "fp16"
+  optimizer: "adam"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "ESM-2"                    # UniRef50/UniRef90 clusters
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_encoder"
+
+  embedding:
+    vocab_size: 33                    # 20 amino acids + special tokens
+    hidden_dim: 1280
+    max_seq_len: 1024
+    rotary_embeddings: true           # ESM2 uses rotary position embeddings
+
+  encoder:
+    num_layers: 33
+    hidden_dim: 1280
+    num_heads: 20
+    head_dim: 64                      # 1280 / 20
+    ffn_dim: 5120                     # 4 × 1280
+    ffn_activation: "gelu"
+    dropout: 0.0
+    layer_norm: "pre"
+    attention_type: "full"            # No causal masking (bidirectional)
+
+stats:
+  total_params_M: 650.0
+  total_flops_forward_G: 1340.0       # GFLOPs for batch=1, seq=1024
+  model_size_fp16_gb: 1.242

@@ -68,6 +68,11 @@ class HardwareSpec:
     pcu_simd_lanes: int = 1
     functional_units_per_pcu: int = 1
 
+    # Spatial dataflow efficiency: fraction of ideal spatial parallelism
+    # actually achieved. Calibrated per platform from benchmark data.
+    # 1.0 = perfect spatial parallelism; typical range 0.4–0.7.
+    spatial_dataflow_efficiency: float = 0.5
+
     def peak_flops(self, dtype: str = "fp16") -> float:
         """Return peak FLOPS in TFLOPS for given data type."""
         mapping = {
@@ -226,6 +231,7 @@ def load_hardware_spec(platform: str) -> HardwareSpec:
         num_pmus=s.get("num_pmus", 0),
         pcu_simd_lanes=s.get("pcu_simd_lanes", 1),
         functional_units_per_pcu=s.get("functional_units_per_pcu", 1),
+        spatial_dataflow_efficiency=s.get("spatial_dataflow_efficiency", 0.5),
     )
 
 

@@ -1,0 +1,61 @@
+# ============================================================
+# Model Definition: DINOv2-Large (ViT-L/14)
+# ============================================================
+
+name: "DINOv2-Large"
+model_id: "dinov2_large"
+model_type: "transformer"
+description: "DINOv2 ViT-Large/14 self-supervised vision transformer (ImageNet)"
+
+training:
+  batch_size: 2048
+  seq_len: 257                        # (224/14)^2 = 256 patches + 1 CLS token
+  dtype: "fp16"
+  optimizer: "adamw"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: false
+  dataset: "ImageNet"
+  backward_ratio: 2.1
+  # DINOv2 self-supervised: student + teacher networks
+  # Teacher is EMA of student — no separate backward pass for teacher
+  objective: "self_distillation"      # DINO loss (cross-entropy of softmax student/teacher)
+
+architecture:
+  type: "transformer_encoder"
+
+  patch_embedding:
+    image_size: 224
+    patch_size: 14                    # ViT-L/14
+    num_patches: 256                  # (224/14)^2
+    in_channels: 3
+    hidden_dim: 1024
+
+  embedding:
+    vocab_size: 0
+    hidden_dim: 1024
+    max_seq_len: 257
+    cls_token: true
+    pos_embedding: "learned"
+
+  encoder:
+    num_layers: 24
+    hidden_dim: 1024
+    num_heads: 16
+    head_dim: 64                      # 1024 / 16
+    ffn_dim: 4096                     # 4 × 1024
+    ffn_activation: "gelu"
+    dropout: 0.0
+    layer_norm: "pre"
+
+  # DINOv2 projection head (MLP on top of CLS token)
+  projection_head:
+    in_features: 1024
+    hidden_features: 2048
+    out_features: 65536               # DINO prototype dimension
+
+stats:
+  total_params_M: 307.0
+  total_flops_forward_G: 182.0        # GFLOPs for batch=1, seq=257
+  model_size_fp16_gb: 0.587

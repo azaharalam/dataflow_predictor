@@ -1,0 +1,61 @@
+# ============================================================
+# Model Definition: T5-3B
+# ============================================================
+
+name: "T5-3B"
+model_id: "t5_3b"
+model_type: "transformer"
+description: "T5-3B encoder-decoder seq2seq model, WMT de-en translation"
+
+training:
+  batch_size: 8
+  seq_len: 512
+  decoder_seq_len: 512
+  dtype: "fp16"
+  optimizer: "adafactor"
+  optimizer_memory_multiplier: 1.0    # Adafactor is memory-efficient
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: true
+  checkpointing_memory_factor: 0.3
+  dataset: "wmt16_de_en"
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_decoder"
+
+  embedding:
+    vocab_size: 32128
+    hidden_dim: 1024
+    max_seq_len: 512
+    shared_embedding: true            # T5 shares encoder/decoder embeddings
+
+  encoder:
+    num_layers: 24
+    hidden_dim: 1024
+    num_heads: 16
+    head_dim: 64
+    ffn_dim: 16384                    # T5-3B uses larger FFN ratio
+    ffn_activation: "relu"
+    dropout: 0.1
+    layer_norm: "pre"
+    layer_norm_type: "rmsnorm"        # T5 uses RMS LayerNorm
+    relative_attention_bias: true     # T5 relative position embeddings
+
+  decoder:
+    num_layers: 24
+    hidden_dim: 1024
+    num_heads: 16
+    head_dim: 64
+    ffn_dim: 16384
+    ffn_activation: "relu"
+    dropout: 0.1
+    layer_norm: "pre"
+    layer_norm_type: "rmsnorm"
+    causal_attention: true
+    cross_attention: true
+
+stats:
+  total_params_M: 2850.0
+  total_flops_forward_G: 7600.0       # GFLOPs for batch=1, seq=512 enc+dec
+  model_size_fp16_gb: 5.447

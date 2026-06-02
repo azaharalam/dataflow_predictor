@@ -28,9 +28,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from hardware.base_hardware import load_hardware_spec, SUPPORTED_PLATFORMS
-from models.model_loader import (
-    get_model, list_available_models, get_training_config
-)
+from models.model_loader import (list_available_models, get_training_config)
+from models.model_zoo import get_model
 from core.compute_module import run_compute_module
 from core.memory_module import run_memory_module
 from core.communication_module import run_communication_module

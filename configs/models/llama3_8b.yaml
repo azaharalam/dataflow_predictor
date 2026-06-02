@@ -1,0 +1,48 @@
+# ============================================================
+# Model Definition: LLaMA 3-8B
+# ============================================================
+
+name: "LLaMA 3-8B"
+model_id: "llama3_8b"
+model_type: "transformer"
+description: "Meta LLaMA 3 8B decoder-only LLM with GQA and RoPE"
+
+training:
+  batch_size: 4
+  seq_len: 4096
+  dtype: "bf16"
+  optimizer: "adamw"
+  optimizer_memory_multiplier: 2.0
+  gradient_dtype: "fp32"
+  mixed_precision: true
+  activation_checkpointing: true
+  checkpointing_memory_factor: 0.3
+  dataset: "SlimPajama"
+  backward_ratio: 2.1
+
+architecture:
+  type: "transformer_decoder"
+
+  embedding:
+    vocab_size: 128256
+    hidden_dim: 4096
+    max_seq_len: 8192
+
+  decoder:
+    num_layers: 32
+    hidden_dim: 4096
+    num_heads: 32
+    num_kv_heads: 8                   # Grouped-query attention (GQA)
+    head_dim: 128                     # 4096 / 32
+    ffn_dim: 14336                    # SwiGLU: intermediate_size
+    ffn_activation: "silu"            # SwiGLU
+    dropout: 0.0
+    layer_norm: "pre"
+    layer_norm_type: "rmsnorm"
+    causal_attention: true
+    rope_theta: 500000.0
+
+stats:
+  total_params_M: 8030.0
+  total_flops_forward_G: 26300.0      # GFLOPs for batch=1, seq=4096
+  model_size_fp16_gb: 15.342          # bf16
