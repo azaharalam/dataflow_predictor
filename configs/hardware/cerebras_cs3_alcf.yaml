@@ -1,0 +1,20 @@
+name: "Cerebras CS-3 (ALCF)"
+hardware_id: "cerebras_cs3_alcf"
+generation: "wse-3"
+
+clock_hz:            {value: 1.1e9,  provenance: TODO,     note: "assumed; verify WSE-3 clock"}
+n_pe_total:          {value: 900000, provenance: spec,     note: "ALCF docs"}
+grid_width:          {value: 704,    provenance: artifact, note: "TargetShape, ws_rt.mlir"}
+grid_height:         {value: 1169,   provenance: artifact, note: "TargetShape, ws_rt.mlir"}
+sram_bytes_per_pe:   {value: 49152,  provenance: spec,     note: ""}
+peak_flops_fp16:     {value: 1.25e17, provenance: spec,    note: "vendor peak; lower-bound T_cmp only"}
+
+bw_memx_achieved:    {value: 5.795e10, provenance: artifact, note: "3800GB / 65.6s, llama3-200B calibration run"}
+bw_memx_compiler:    {value: 8.64e10,  provenance: artifact, note: "3800GB / 43.98s; baseline only, never input"}
+
+k_in:                {value: 1.358,  provenance: artifact, note: "ingress GB / (n_boxes * W); 2173/(2*800)"}
+k_out:               {value: 1.017,  provenance: artifact, note: "egress GB / (n_boxes * W); 1627/(2*800)"}
+
+swarmx_link_bw_bits_s: {value: 100.0e9, provenance: spec,  note: ""}
+br_nodes:            {value: 12,     provenance: artifact, note: "cluster_cfg.json"}
+br_groups:           {value: 3,      provenance: artifact, note: "cluster_cfg.json"}

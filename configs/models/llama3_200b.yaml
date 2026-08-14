@@ -1,0 +1,26 @@
+name: "Llama-3 200B (ALCF acceptance)"
+model_id: "llama3_200b"
+model_type: "transformer"
+
+training:
+  batch_size: 8
+  seq_len: 2048
+  dtype: "bf16"
+  weights_stored_dtype: "fp32"
+  n_boxes: 2
+
+architecture:
+  type: "transformer_decoder"
+  embedding:
+    vocab_size: 128256
+    hidden_dim: 8704
+  decoder:
+    num_layers: 126
+    hidden_dim: 8704
+    num_heads: 64
+    num_kv_heads: 16
+    head_dim: 136
+    ffn_dim: 53248
+    ffn_activation: "swiglu"
+    norm: "rmsnorm"
+  tie_embeddings: false
